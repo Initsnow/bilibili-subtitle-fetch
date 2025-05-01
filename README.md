@@ -4,19 +4,7 @@ MCP server for fetching Bilibili video subtitles with language and format option
 
 ## Quick Start
 
-1. Install dependencies:
-
-```bash
-uvx bilibili-subtitle-fetch
-```
-
-or use
-
-```bash
-pip install bilibili-subtitle-fetch
-```
-
-2. Set required environment variables:
+1. Set required environment variables:
 
 ```bash
 export BILIBILI_SESSDATA=your_sessdata
@@ -24,10 +12,11 @@ export BILIBILI_BILI_JCT=your_jct
 export BILIBILI_BUVID3=your_buvid3
 ```
 
-3. Run the server with optional parameters:
+2. Run the server with optional parameters:
 
 ```bash
-bilibili-subtitle-fetch --preferred-lang zh-CN --output-format text
+scoop install uv
+uvx bilibili-subtitle-fetch --preferred-lang zh-CN --output-format text
 ```
 
 ## Configuration

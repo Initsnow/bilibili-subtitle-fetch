@@ -280,21 +280,25 @@ def main():
     Main function to run the MCP server with CLI arguments.
     """
     import argparse
-    
-    parser = argparse.ArgumentParser(description='Bilibili Subtitle Fetch MCP Server')
-    parser.add_argument('--preferred-lang', 
-                       default=os.environ.get("BILIBILI_PREFERRED_LANG", "zh-CN"),
-                       help='Preferred subtitle language (default: zh-CN)')
-    parser.add_argument('--output-format',
-                       default=os.environ.get("BILIBILI_OUTPUT_FORMAT", "text"),
-                       choices=["text", "timestamped"],
-                       help='Subtitle output format (text or timestamped)')
-    
+
+    parser = argparse.ArgumentParser(description="Bilibili Subtitle Fetch MCP Server")
+    parser.add_argument(
+        "--preferred-lang",
+        default=os.environ.get("BILIBILI_PREFERRED_LANG", "zh-CN"),
+        help="Preferred subtitle language (default: zh-CN)",
+    )
+    parser.add_argument(
+        "--output-format",
+        default=os.environ.get("BILIBILI_OUTPUT_FORMAT", "text"),
+        choices=["text", "timestamped"],
+        help="Subtitle output format (text or timestamped)",
+    )
+
     args = parser.parse_args()
-    
+
     # Update the tool's default parameters
     get_bilibili_subtitle.__defaults__ = (args.preferred_lang, args.output_format)
-    
+
     mcp.run()
 
 
