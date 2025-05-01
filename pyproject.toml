@@ -1,12 +1,22 @@
 [project]
-name = "bilibili-video-content-getter"
-version = "0.1.0"
-description = "Add your description here"
+name = "bilibili-subtitle-fetch"
+version = "0.1.2"
+description = "An MCP (Model Context Protocol) server that allows you to fetch subtitles for Bilibili videos."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "asyncio>=3.4.3",
-    "bilibili-api-python>=17.1.4",
-    "httpx>=0.27.0",
-    "mcp[cli]>=1.6.0",
+  "bilibili-api-python>=17.1.4",
+  "httpx>=0.27.0",
+  "mcp[cli]>=1.6.0",
 ]
+authors = [{ name = "Initsnow" }]
+keywords = ["http", "mcp", "llm", "automation"]
+license = { text = "GPLv3" }
+
+[project.scripts]
+bilibili-subtitle-fetch = "bilibili_subtitile_fetch.server:main"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[tool.hatch.build.targets.wheel]
+packages = ["src/bilibili_subtitile_fetch"]
