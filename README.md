@@ -1,71 +1,59 @@
-# Bilibili Subtitle Fetch MCP Server
+# Bilibili Subtitle Fetch
 
-This project provides an MCP (Model Context Protocol) server that allows you to fetch subtitles for Bilibili videos.
+MCP server for fetching Bilibili video subtitles with language and format options.
 
-## Features
+## Quick Start
 
-- Fetches subtitles for Bilibili videos using a given URL.
-- Supports specifying a preferred subtitle language.
-- Supports outputting subtitles in plain text or with timestamps.
-- Uses environment variables for Bilibili credentials.
+1. Install dependencies:
 
-## Installation
-
-Optionally: Install node.js, this will cause the fetch server to use a different HTML simplifier that is more robust.
-
-### Using uv (recommended)
-
-When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
-use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *bilibili-subtitle-fetch*.
-
-### Using PIP
-
-Alternatively you can install `bilibili-subtitle-fetch` via pip:
-
+```bash
+uvx bilibili-subtitle-fetch
 ```
+
+or use
+
+```bash
 pip install bilibili-subtitle-fetch
 ```
 
-After installation, you can run it as a script using:
-
-```
-python -m bilibili_subtitle_fetch
-```
-
-To run the MCP server, execute the `server.py` file:
+2. Set required environment variables:
 
 ```bash
-python server.py
+export BILIBILI_SESSDATA=your_sessdata
+export BILIBILI_BILI_JCT=your_jct 
+export BILIBILI_BUVID3=your_buvid3
 ```
 
-The server will start and listen for incoming requests.
+3. Run the server with optional parameters:
 
-## Using the `get_bilibili_subtitle` Tool
+```bash
+bilibili-subtitle-fetch --preferred-lang zh-CN --output-format text
+```
 
-Once the server is running and connected to your MCP client, you can use the `get_bilibili_subtitle` tool.
+## Configuration
 
-**Tool Name:** `get_bilibili_subtitle`
+### Environment Variables
 
-**Description:** Fetches subtitles for a given Bilibili video URL.
+- `BILIBILI_SESSDATA`, `BILIBILI_BILI_JCT`, `BILIBILI_BUVID3` - Required Bilibili credentials
+- `BILIBILI_PREFERRED_LANG` - Default subtitle language (default: zh-CN)
+- `BILIBILI_OUTPUT_FORMAT` - Subtitle format (text/timestamped, default: text)
 
-**Parameters:**
+### CLI Arguments
 
-- `url` (required, string): The URL of the Bilibili video (e.g., "<https://www.bilibili.com/video/BV1fz4y1j7Mf/?p=2>").
-- `preferred_lang` (optional, string): The preferred subtitle language code (e.g., 'zh-CN', 'ai-zh', 'en'). Defaults to 'zh-CN'. Check the video page for available languages. 'ai-zh' is often AI-generated Chinese.
-- `output_format` (optional, string): The desired format for the subtitles ('text' for plain text, 'timestamped' for text with timestamps). Defaults to 'text'.
+- `--preferred-lang` - Override default subtitle language
+- `--output-format` - Override output format
 
-**Example Usage (via MCP Client):**
+## MCP Tool Usage
 
 ```json
 {
-  "server_name": "bilibili-subtitle-getter",
   "tool_name": "get_bilibili_subtitle",
   "arguments": {
-    "url": "https://www.bilibili.com/video/BV1fz4y1j7Mf/?p=2",
-    "preferred_lang": "en",
-    "output_format": "timestamped"
+    "url": "bilibili_video_url",
+    "preferred_lang": "optional_lang_code", 
+    "output_format": "text|timestamped"
   }
 }
 ```
 
-Replace `"your_server_name"` with the actual name or identifier your MCP client uses to connect to this server.
+[Get Bilibili credentials](https://nemo2011.github.io/bilibili-api/#/get-credential.md)
