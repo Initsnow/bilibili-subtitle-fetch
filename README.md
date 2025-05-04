@@ -16,7 +16,7 @@ export BILIBILI_BUVID3=your_buvid3
 
 ```bash
 scoop install uv
-uvx bilibili-subtitle-fetch --preferred-lang zh-CN --output-format text
+uvx bilibili-subtitle-fetch
 ```
 
 ## Configuration
