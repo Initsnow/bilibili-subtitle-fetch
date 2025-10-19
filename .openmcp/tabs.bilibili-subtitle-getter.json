@@ -1,0 +1,28 @@
+{
+  "clientId": "48cb9ae0-9ae0-5b9ae022430-8b9ae022430847e-0847e0e8",
+  "currentIndex": 0,
+  "tabs": [
+    {
+      "name": "工具",
+      "icon": "icon-tool",
+      "type": "blank",
+      "componentIndex": 2,
+      "storage": {
+        "activeNames": [
+          0
+        ],
+        "autoDetectDiagram": {
+          "edges": [],
+          "views": []
+        },
+        "formData": {
+          "url": "",
+          "bvid": "",
+          "preferred_lang": "",
+          "output_format": ""
+        },
+        "currentToolName": "get_bilibili_subtitle"
+      }
+    }
+  ]
+}

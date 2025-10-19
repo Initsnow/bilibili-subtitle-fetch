@@ -52,25 +52,27 @@ def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
 mcp = FastMCP(
     name="bilibili-subtitle-getter",
     description="An MCP server to fetch subtitles from Bilibili videos.",
-    version="0.1.0",
+    version="0.1.5",
 )
 
 
 # Define the tool
 @mcp.tool(
     name="get_bilibili_subtitle",
-    description="Fetches subtitles for a given Bilibili video URL",
+    description="Fetches subtitles for a given Bilibili video URL or BVID",
 )
 async def get_bilibili_subtitle(
     ctx: Context,
-    url: str,
+    url: Optional[str] = None,
+    bvid: Optional[str] = None,
     preferred_lang: str = "en",  # Default to English
     output_format: Literal["text", "timestamped"] = "text",  # Default to plain text
 ) -> str:
     """
-    Fetches subtitles for a given Bilibili video URL.
+    Fetches subtitles for a given Bilibili video URL or BVID.
 
     :param url: The URL of the Bilibili video (e.g., "https://www.bilibili.com/video/BV1fz4y1j7Mf/?p=2").
+    :param bvid: The BVID of the Bilibili video (e.g., "BV1fz4y1j7Mf").
     :param preferred_lang: The preferred subtitle language code (e.g., 'zh-CN', 'ai-zh', 'en'). Defaults to 'zh-CN'.
                            Check the video page for available languages. 'ai-zh' is often AI-generated Chinese.
     :param output_format: The desired format for the subtitles ('text' for plain text, 'timestamped' for text with timestamps). Defaults to 'text'.
@@ -78,14 +80,30 @@ async def get_bilibili_subtitle(
     """
     await ctx.log(
         "info",
-        f"Received request for URL: {url}, lang: {preferred_lang}, format: {output_format}",
+        f"Received request for URL: {url}, BVID: {bvid}, lang: {preferred_lang}, format: {output_format}",
     )
 
-    bvid, page = parse_bilibili_url(url)
+    # Validate input - either url or bvid must be provided, but not both
+    if url and bvid:
+        await ctx.log("error", "Both URL and BVID provided. Please provide only one.")
+        return "Error: Both URL and BVID provided. Please provide only one."
+    
+    if not url and not bvid:
+        await ctx.log("error", "Neither URL nor BVID provided. Please provide one.")
+        return "Error: Neither URL nor BVID provided. Please provide one."
 
-    if not bvid:
-        await ctx.log("error", f"Could not extract bvid from URL: {url}")
-        return f"Error: Could not extract a valid bvid from the URL: {url}"
+    # Parse bvid and page from URL if URL is provided
+    page = None
+    if url:
+        bvid, page = parse_bilibili_url(url)
+        if not bvid:
+            await ctx.log("error", f"Could not extract bvid from URL: {url}")
+            return f"Error: Could not extract a valid bvid from the URL: {url}"
+    # If bvid is provided directly, validate it
+    elif bvid:
+        if not re.match(r"^BV[1-9A-HJ-NP-Za-km-z]{10}$", bvid):
+            await ctx.log("error", f"Invalid BVID format: {bvid}")
+            return f"Error: Invalid BVID format: {bvid}"
 
     await ctx.log("info", f"Parsed bvid: {bvid}, page: {page}")
 
@@ -273,35 +291,3 @@ async def get_bilibili_subtitle(
             "error", f"An unexpected error occurred: {e}"
         )  # Log full traceback
         return f"An unexpected error occurred: {type(e).__name__} - {e}"
-
-
-def main():
-    """
-    Main function to run the MCP server with CLI arguments.
-    """
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Bilibili Subtitle Fetch MCP Server")
-    parser.add_argument(
-        "--preferred-lang",
-        default=os.environ.get("BILIBILI_PREFERRED_LANG", "zh-CN"),
-        help="Preferred subtitle language (default: zh-CN)",
-    )
-    parser.add_argument(
-        "--output-format",
-        default=os.environ.get("BILIBILI_OUTPUT_FORMAT", "text"),
-        choices=["text", "timestamped"],
-        help="Subtitle output format (text or timestamped)",
-    )
-
-    args = parser.parse_args()
-
-    # Update the tool's default parameters
-    get_bilibili_subtitle.__defaults__ = (args.preferred_lang, args.output_format)
-
-    mcp.run()
-
-
-# Main execution block to run the server
-if __name__ == "__main__":
-    main()
