@@ -2,6 +2,8 @@
 
 MCP server for fetching Bilibili video subtitles with language and format options.
 
+`uv tool install --python 3.13 bilibili-subtitle-fetch`
+
 ## Configuration
 
 ### Environment Variables

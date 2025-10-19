@@ -49,11 +49,7 @@ def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
 
 
 # Define the MCP Server
-mcp = FastMCP(
-    name="bilibili-subtitle-getter",
-    description="An MCP server to fetch subtitles from Bilibili videos.",
-    version="0.1.5",
-)
+mcp = FastMCP(name="bilibili-subtitle-getter")
 
 
 # Define the tool
@@ -87,7 +83,7 @@ async def get_bilibili_subtitle(
     if url and bvid:
         await ctx.log("error", "Both URL and BVID provided. Please provide only one.")
         return "Error: Both URL and BVID provided. Please provide only one."
-    
+
     if not url and not bvid:
         await ctx.log("error", "Neither URL nor BVID provided. Please provide one.")
         return "Error: Neither URL nor BVID provided. Please provide one."
@@ -291,3 +287,35 @@ async def get_bilibili_subtitle(
             "error", f"An unexpected error occurred: {e}"
         )  # Log full traceback
         return f"An unexpected error occurred: {type(e).__name__} - {e}"
+
+
+def main():
+    """
+    Main function to run the MCP server with CLI arguments.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Bilibili Subtitle Fetch MCP Server")
+    parser.add_argument(
+        "--preferred-lang",
+        default=os.environ.get("BILIBILI_PREFERRED_LANG", "zh-CN"),
+        help="Preferred subtitle language (default: zh-CN)",
+    )
+    parser.add_argument(
+        "--output-format",
+        default=os.environ.get("BILIBILI_OUTPUT_FORMAT", "text"),
+        choices=["text", "timestamped"],
+        help="Subtitle output format (text or timestamped)",
+    )
+
+    args = parser.parse_args()
+
+    # Update the tool's default parameters
+    get_bilibili_subtitle.__defaults__ = (args.preferred_lang, args.output_format)
+
+    mcp.run()
+
+
+# Main execution block to run the server
+if __name__ == "__main__":
+    main()
