@@ -9,7 +9,7 @@ async def download(url: str,  intro: str, file: BinaryIO):
     tot = get_client().download_content_length(dwn_id)
     while True:
         bts += file.write(await get_client().download_chunk(dwn_id))
-        print(f"{intro} - [{bts} / {tot}]", end="\r")
+        # print(f"{intro} - [{bts} / {tot}]", end="\r")
         if bts == tot:
             break
     print()

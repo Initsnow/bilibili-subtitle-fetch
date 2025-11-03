@@ -358,15 +358,15 @@ async def get_bilibili_video_desc(bvid: str) -> str:
     description="Generates subtitles from a Bilibili video by its BVID.",
 )
 async def get_subtitle_from_audio(
-    bvid: str, type: Literal["text", "timestamped"] = "text"
+    ctx: Context,
+    bvid: str,
+    type: Literal["text", "timestamped"] = "text",
+    model_size: Literal["tiny", "base", "small", "medium", "large"] = "small",
 ) -> str:
-    """
-    if get_bilibili_subtitle has failed, use this tool to get subtitles by downloading audio and generating subtitles.
-    """
-    print(f"bvid: {bvid}, encoding: {bvid.encode('utf-8')}")
+    await ctx.log("info", f"Generating subtitles for bvid: {bvid} with model size: {model_size}")
     v = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
     f = await download_audio(v)
-    r = generate_subtitles(f, type)
+    r = generate_subtitles(f, type, model_size)
     return r
 
 

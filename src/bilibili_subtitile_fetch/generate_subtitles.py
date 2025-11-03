@@ -37,6 +37,7 @@ def generate_subtitles(
 ) -> str:
     device = get_device()
     print("Using device:", device)
+    print(f"Loading whisper model: {model_size}")
 
     # 加载模型
     model = WhisperModel(model_size, device=device)
