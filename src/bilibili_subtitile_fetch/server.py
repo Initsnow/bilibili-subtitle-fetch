@@ -339,7 +339,7 @@ async def search_bilibili_videos(
         senddate = datetime.fromtimestamp(v["senddate"]).strftime("%y%m%d")
         videos += f"{v['title']} by {v['author']} (play {v['play']}, fav {v['favorites']}, {senddate}, id {v['bvid']})\n"
 
-    videos = videos.strip().replace(f'<em class="keyword">{keyword}</em>', keyword)
+    videos = re.sub(r'<em class="keyword">(.*?)</em>', r'\1', videos.strip())
     return videos
 
 
@@ -363,7 +363,9 @@ async def get_subtitle_from_audio(
     type: Literal["text", "timestamped"] = "text",
     model_size: Literal["tiny", "base", "small", "medium", "large"] = "small",
 ) -> str:
-    await ctx.log("info", f"Generating subtitles for bvid: {bvid} with model size: {model_size}")
+    await ctx.log(
+        "info", f"Generating subtitles for bvid: {bvid} with model size: {model_size}"
+    )
     v = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
     f = await download_audio(v)
     r = generate_subtitles(f, type, model_size)
