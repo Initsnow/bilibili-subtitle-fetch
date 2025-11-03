@@ -4,8 +4,13 @@ import httpx
 from typing import Optional, Literal
 from urllib.parse import urlparse, parse_qs
 
-from bilibili_api import video, Credential
+from bilibili_api import video, Credential, search
 from mcp.server.fastmcp import FastMCP, Context
+from enum import Enum
+from dataclasses import dataclass
+from datetime import datetime
+from bilibili_subtitile_fetch.generate_subtitles import generate_subtitles
+from bilibili_subtitile_fetch.download_audio import download_audio
 
 # Your Bilibili Credentials
 # Get credentials from environment variables
@@ -49,7 +54,7 @@ def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
 
 
 # Define the MCP Server
-mcp = FastMCP(name="bilibili-subtitle-getter")
+mcp = FastMCP(name="bilibili-subtitle-fetch")
 
 
 # Define the tool
@@ -289,6 +294,82 @@ async def get_bilibili_subtitle(
         return f"An unexpected error occurred: {type(e).__name__} - {e}"
 
 
+class TimeRange(Enum):
+    Under10Minutes = 10
+    From10to30Minutes = 30
+    From30to60Minutes = 60
+    Over60Minutes = 61
+
+
+@dataclass
+class VideoInfo:
+    bvid: str
+    title: str
+    author: str
+    description: str
+    play_count: int
+    favorites: int
+    senddate: str
+
+
+@mcp.tool(
+    name="search_bilibili_videos",
+    description="Searches for Bilibili videos.",
+)
+async def search_bilibili_videos(
+    keyword: str,
+    order_type: search.OrderVideo = search.OrderVideo.TOTALRANK,
+    time_range: Optional[TimeRange] = None,
+    page: int = 1,
+    time_start: Optional[str] = None,
+    time_end: Optional[str] = None,
+) -> str:
+    r = await search.search_by_type(
+        keyword,
+        search_type=search.SearchObjectType.VIDEO,
+        order_type=order_type,
+        time_range=time_range.value if time_range is not None else -1,
+        page=page,
+        time_start=time_start,
+        time_end=time_end,
+    )
+
+    videos = ""
+    for v in r["result"]:
+        senddate = datetime.fromtimestamp(v["senddate"]).strftime("%y%m%d")
+        videos += f"{v['title']} by {v['author']} (play {v['play']}, fav {v['favorites']}, {senddate}, id {v['bvid']})\n"
+
+    videos = videos.strip().replace(f'<em class="keyword">{keyword}</em>', keyword)
+    return videos
+
+
+@mcp.tool(
+    name="get_bilibili_video_desc",
+    description="Fetches the description of a Bilibili video by its BVID.",
+)
+async def get_bilibili_video_desc(bvid: str) -> str:
+    r = await video.Video(bvid=bvid).get_info()
+    desc = r["desc"]
+    return desc.strip()
+
+
+@mcp.tool(
+    name="get_subtitle_from_audio",
+    description="Generates subtitles from a Bilibili video by its BVID.",
+)
+async def get_subtitle_from_audio(
+    bvid: str, type: Literal["text", "timestamped"] = "text"
+) -> str:
+    """
+    if get_bilibili_subtitle has failed, use this tool to get subtitles by downloading audio and generating subtitles.
+    """
+    print(f"bvid: {bvid}, encoding: {bvid.encode('utf-8')}")
+    v = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
+    f = await download_audio(v)
+    r = generate_subtitles(f, type)
+    return r
+
+
 def main():
     """
     Main function to run the MCP server with CLI arguments.
@@ -319,3 +400,7 @@ def main():
 # Main execution block to run the server
 if __name__ == "__main__":
     main()
+    # import asyncio
+    # asyncio.run(get_subtitle_from_audio("BV19PpRzmE81", type="text"))
+    # asyncio.run(search_bilibili_videos(keyword="三浦"))
+    # asyncio.run(get_bilibili_video_desc("BV1xuH9zaE23"))
