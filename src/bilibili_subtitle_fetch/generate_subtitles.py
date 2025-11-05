@@ -46,28 +46,6 @@ def generate_subtitles(
     print("Transcribing...")
     segments, info = model.transcribe(audio, beam_size=5)
 
-    # 输出文件名
-    # base, _ = os.path.splitext(audio_path)
-    # srt_path = base + ".srt"
-    # srt_path = base + ".srt"
-    # txt_path = base + ".txt"
-
-    # # 写入SRT
-    # with open(srt_path, "w", encoding="utf-8") as srt, open(txt_path, "w", encoding="utf-8") as txt:
-    #     for i, segment in enumerate(segments, start=1):
-    #         start = segment.start
-    #         end = segment.end
-    #         text = segment.text.strip()
-
-    #         # 写入SRT
-    #         srt.write(f"{i}\n")
-    #         srt.write(f"{format_timestamp(start)} --> {format_timestamp(end)}\n")
-    #         srt.write(f"{text}\n\n")
-
-    #         # 写入TXT（不带时间）
-    #         txt.write(text + "\n")
-
-    # print(f"\n✅ 字幕已生成：\n{srt_path}\n{txt_path}")
     if type == "text":
         return "\n".join([segment.text.strip() for segment in segments])
     else:

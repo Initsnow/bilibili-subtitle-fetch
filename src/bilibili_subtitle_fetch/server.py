@@ -9,8 +9,8 @@ from mcp.server.fastmcp import FastMCP, Context
 from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
-from bilibili_subtitile_fetch.generate_subtitles import generate_subtitles
-from bilibili_subtitile_fetch.download_audio import download_audio
+from bilibili_subtitle_fetch.generate_subtitles import generate_subtitles
+from bilibili_subtitle_fetch.download_audio import download_audio
 
 # Your Bilibili Credentials
 # Get credentials from environment variables
