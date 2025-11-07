@@ -3,11 +3,9 @@ import re
 import httpx
 from typing import Optional, Literal
 from urllib.parse import urlparse, parse_qs
-
 from bilibili_api import video, Credential, search
 from mcp.server.fastmcp import FastMCP, Context
 from enum import Enum
-from dataclasses import dataclass
 from datetime import datetime
 from bilibili_subtitle_fetch.generate_subtitles import generate_subtitles
 from bilibili_subtitle_fetch.download_audio import download_audio
@@ -301,17 +299,6 @@ class TimeRange(Enum):
     Over60Minutes = 61
 
 
-@dataclass
-class VideoInfo:
-    bvid: str
-    title: str
-    author: str
-    description: str
-    play_count: int
-    favorites: int
-    senddate: str
-
-
 @mcp.tool(
     name="search_bilibili_videos",
     description="Searches for Bilibili videos.",
@@ -339,7 +326,7 @@ async def search_bilibili_videos(
         senddate = datetime.fromtimestamp(v["senddate"]).strftime("%y%m%d")
         videos += f"{v['title']} by {v['author']} (play {v['play']}, fav {v['favorites']}, {senddate}, id {v['bvid']})\n"
 
-    videos = re.sub(r'<em class="keyword">(.*?)</em>', r'\1', videos.strip())
+    videos = re.sub(r'<em class="keyword">(.*?)</em>', r"\1", videos.strip())
     return videos
 
 
@@ -355,7 +342,7 @@ async def get_bilibili_video_desc(bvid: str) -> str:
 
 @mcp.tool(
     name="get_subtitle_from_audio",
-    description="Generates subtitles from a Bilibili video by its BVID.",
+    description="Generates subtitles from a Bilibili video by its BVID. Default model size is 'small'.",
 )
 async def get_subtitle_from_audio(
     ctx: Context,
@@ -363,13 +350,18 @@ async def get_subtitle_from_audio(
     type: Literal["text", "timestamped"] = "text",
     model_size: Literal["tiny", "base", "small", "medium", "large"] = "small",
 ) -> str:
-    await ctx.log(
-        "info", f"Generating subtitles for bvid: {bvid} with model size: {model_size}"
-    )
-    v = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
-    f = await download_audio(v)
-    r = generate_subtitles(f, type, model_size)
-    return r
+    try:
+        await ctx.log(
+            "info",
+            f"Generating subtitles for bvid: {bvid} with model size: {model_size}",
+        )
+        v = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
+        f = await download_audio(v)
+        r = generate_subtitles(f, type, model_size)
+        return r
+    except Exception as e:
+        await ctx.log("error", f"Error: {e}")
+        return f"Error: {e}"
 
 
 def main():
