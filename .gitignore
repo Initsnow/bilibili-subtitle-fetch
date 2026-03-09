@@ -11,3 +11,4 @@ wheels/
 
 tmp/
 .openmcp/
+.env

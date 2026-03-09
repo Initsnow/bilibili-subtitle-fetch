@@ -1,11 +1,11 @@
 [project]
 name = "bilibili-subtitle-fetch"
-version = "0.2.7"
+version = "0.2.8"
 description = "An MCP (Model Context Protocol) server that allows you to fetch subtitles for Bilibili videos."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
-  "bilibili-api-python>=17.1.4",
+  "bilibili-api-python>=17.4.1",
   "faster-whisper>=1.2.1",
   "httpx>=0.27.0",
   "mcp[cli]>=1.6.0",
