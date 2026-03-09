@@ -33,18 +33,26 @@ def get_device():
 
 
 def generate_subtitles(
-    audio: BinaryIO, type: Literal["text", "timestamped"], model_size: str = "small"
+    audio: BinaryIO, type: Literal["text", "timestamped"], model_size: str = "base"
 ) -> str:
     device = get_device()
-    print("Using device:", device)
+
+    # 针对低配置/低内存 VPS 的优化：
+    # 1. CPU 环境下默认使用 int8 量化，显著降低内存占用并提升速度
+    # 2. auto 会在 GPU 上尝试 float16，不兼容则回退
+    compute_type = "int8" if device == "cpu" else "default"
+
+    print(f"Using device: {device}, compute_type: {compute_type}")
     print(f"Loading whisper model: {model_size}")
 
-    # 加载模型
-    model = WhisperModel(model_size, device=device)
+    model = WhisperModel(
+        model_size,
+        device=device,
+        compute_type=compute_type,
+    )
 
-    # 转录
     print("Transcribing...")
-    segments, info = model.transcribe(audio, beam_size=5)
+    segments, info = model.transcribe(audio)
 
     if type == "text":
         return "\n".join([segment.text.strip() for segment in segments])

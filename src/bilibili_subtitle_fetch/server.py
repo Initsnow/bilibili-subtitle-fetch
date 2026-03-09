@@ -365,13 +365,13 @@ async def get_bilibili_video_desc(bvid: str) -> str:
 
 @mcp.tool(
     name="get_subtitle_from_audio",
-    description="Generates subtitles from a Bilibili video by its BVID. Default model size is 'small'.",
+    description="Generates subtitles from a Bilibili video by its BVID. Default model size is 'base'.",
 )
 async def get_subtitle_from_audio(
     ctx: Context,
     bvid: str,
     type: Literal["text", "timestamped"] = "text",
-    model_size: Literal["tiny", "base", "small", "medium", "large"] = "small",
+    model_size: Literal["tiny", "base", "small", "medium", "large"] = "base",
 ) -> str:
     try:
         await ctx.log(
