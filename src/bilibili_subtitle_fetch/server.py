@@ -2,7 +2,8 @@ import os
 import re
 import httpx
 from typing import Optional, Literal
-from urllib.parse import urlparse, parse_qs
+import time
+from urllib.parse import urlparse, parse_qs, unquote
 from bilibili_api import video, Credential, search
 from mcp.server.fastmcp import FastMCP, Context
 from enum import Enum
@@ -91,6 +92,28 @@ async def get_bilibili_subtitle(
         await ctx.log("error", "Neither URL nor BVID provided. Please provide one.")
         return "Error: Neither URL nor BVID provided. Please provide one."
 
+    # Check SESSDATA expiration
+    sessdata = os.environ.get("BILIBILI_SESSDATA")
+    if sessdata:
+        try:
+            unquoted_sessdata = unquote(sessdata)
+            parts = unquoted_sessdata.split(",")
+            if len(parts) >= 3:
+                expiry_ts = int(parts[1])
+                if time.time() > expiry_ts:
+                    expiry_date = datetime.fromtimestamp(expiry_ts).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    await ctx.log(
+                        "warning",
+                        f"BILIBILI_SESSDATA appears to have expired on {expiry_date}",
+                    )
+                    return f"Error: BILIBILI_SESSDATA expired on {expiry_date}. Please update it in the environment variables. Subtitles cannot be retrieved via API without valid login."
+        except Exception as e:
+            await ctx.log(
+                "warning", f"Could not parse SESSDATA to check expiration: {e}"
+            )
+
     # Parse bvid and page from URL if URL is provided
     page = None
     if url:
@@ -160,7 +183,7 @@ async def get_bilibili_subtitle(
         available_subtitles = subtitle_info.get("subtitles", [])
         if not available_subtitles:
             await ctx.log("warning", "No subtitles found for this video part.")
-            return "Info: No subtitles available for this video part."
+            return "Info: No subtitles available for this video part. This could happen if the video actually lacks subtitles, or if the BILIBILI_SESSDATA is invalid/expired (Bilibili hides AI subtitles from unauthenticated API requests)."
 
         # Find the preferred subtitle URL
         subtitle_url: Optional[str] = None
