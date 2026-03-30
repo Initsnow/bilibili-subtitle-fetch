@@ -139,8 +139,7 @@ wheels = [
 ]
 
 [[package]]
-name = "bilibili-subtitle-fetch"
-version = "0.2.9"
+$10.2.10"
 source = { editable = "." }
 dependencies = [
     { name = "bilibili-api-python" },
@@ -1836,3 +1835,5 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c6/cc/d79ba8292f51f81f4dc533a8ccfb9fc6992cabf0998ed3245de7589dc07c/yarl-1.23.0-cp313-cp313t-win_arm64.whl", hash = "sha256:ac09d42f48f80c9ee1635b2fcaa819496a44502737660d3c0f2ade7526d29144", size = 84786, upload-time = "2026-03-01T22:06:41.988Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/69/68/c8739671f5699c7dc470580a4f821ef37c32c4cb0b047ce223a7f115757f/yarl-1.23.0-py3-none-any.whl", hash = "sha256:a2df6afe50dea8ae15fa34c9f824a3ee958d785fd5d089063d960bae1daa0a3f", size = 48288, upload-time = "2026-03-01T22:07:51.388Z" },
 ]
+
+

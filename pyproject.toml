@@ -1,6 +1,6 @@
 [project]
 name = "bilibili-subtitle-fetch"
-version = "0.2.9"
+version = "0.2.10"
 description = "An MCP (Model Context Protocol) server that allows you to fetch subtitles for Bilibili videos."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -31,3 +31,4 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
