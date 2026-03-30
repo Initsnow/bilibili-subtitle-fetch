@@ -19,6 +19,9 @@ BILIBILI_CREDENTIAL = Credential(
     buvid3=os.environ.get("BILIBILI_BUVID3"),
 )
 
+BVID_PATTERN = re.compile(r"^BV[1-9A-HJ-NP-Za-km-z]{10}$")
+SHORT_LINK_HOSTS = {"b23.tv", "www.b23.tv", "bili2233.cn", "www.bili2233.cn"}
+
 
 # Helper function to parse Bilibili URL
 def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
@@ -37,7 +40,7 @@ def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
 
     # Find BV ID in path
     for part in path_parts:
-        if re.match(r"^BV[1-9A-HJ-NP-Za-km-z]{10}$", part):
+        if BVID_PATTERN.match(part):
             bvid = part
             break
 
@@ -50,6 +53,22 @@ def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
             pass  # Ignore invalid page numbers
 
     return bvid, page
+
+
+def is_bilibili_short_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return host in SHORT_LINK_HOSTS
+
+
+async def resolve_bilibili_short_url(url: str) -> str:
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=10.0,
+    ) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return str(response.url)
 
 
 # Define the MCP Server
@@ -118,12 +137,21 @@ async def get_bilibili_subtitle(
     page = None
     if url:
         bvid, page = parse_bilibili_url(url)
+        if not bvid and is_bilibili_short_url(url):
+            await ctx.log("info", f"Resolving Bilibili short URL: {url}")
+            try:
+                resolved_url = await resolve_bilibili_short_url(url)
+                await ctx.log("info", f"Resolved short URL to: {resolved_url}")
+                bvid, page = parse_bilibili_url(resolved_url)
+            except httpx.HTTPError as e:
+                await ctx.log("error", f"Failed to resolve short URL {url}: {e}")
+                return f"Error: Failed to resolve Bilibili short URL: {url}"
         if not bvid:
             await ctx.log("error", f"Could not extract bvid from URL: {url}")
             return f"Error: Could not extract a valid bvid from the URL: {url}"
     # If bvid is provided directly, validate it
     elif bvid:
-        if not re.match(r"^BV[1-9A-HJ-NP-Za-km-z]{10}$", bvid):
+        if not BVID_PATTERN.match(bvid):
             await ctx.log("error", f"Invalid BVID format: {bvid}")
             return f"Error: Invalid BVID format: {bvid}"
 

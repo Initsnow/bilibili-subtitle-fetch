@@ -140,7 +140,7 @@ wheels = [
 
 [[package]]
 name = "bilibili-subtitle-fetch"
-version = "0.2.7"
+version = "0.2.9"
 source = { editable = "." }
 dependencies = [
     { name = "bilibili-api-python" },

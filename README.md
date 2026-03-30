@@ -4,6 +4,12 @@ MCP server for fetching Bilibili video subtitles with language and format option
 
 `uv tool install --python 3.13 bilibili-subtitle-fetch`
 
+支持以下输入：
+
+- `BV` 号，例如 `BV1fz4y1j7Mf`
+- 标准视频链接，例如 `https://www.bilibili.com/video/BV1fz4y1j7Mf?p=2`
+- 短链，例如 `https://b23.tv/FAm7Xn4`
+
 ## Configuration
 
 ### Environment Variables
