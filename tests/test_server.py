@@ -1,8 +1,11 @@
 import unittest
+from unittest.mock import patch
 
+from bilibili_subtitle_fetch.credentials import CredentialStoreError
 from bilibili_subtitle_fetch.server import (
     choose_subtitle,
     format_subtitle_body,
+    main,
     normalize_subtitle_url,
     parse_bilibili_url,
     select_cid,
@@ -78,6 +81,17 @@ class ServerHelpersTest(unittest.TestCase):
             format_subtitle_body(body, "timestamped"),
             "00:00:01.250 --> 00:00:02.500\nhello",
         )
+
+    def test_main_errors_when_config_missing(self) -> None:
+        with patch(
+            "bilibili_subtitle_fetch.server.CREDENTIAL_MANAGER.validate_runtime_config",
+            side_effect=CredentialStoreError("missing config"),
+        ):
+            with patch("sys.argv", ["bilibili-subtitle-fetch", "serve"]):
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+
+        self.assertEqual(str(ctx.exception), "Error: missing config")
 
 
 if __name__ == "__main__":

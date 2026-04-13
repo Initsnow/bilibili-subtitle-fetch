@@ -1,24 +1,24 @@
 import asyncio
 import os
 import re
-import time
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
-from bilibili_api import Credential, search, video
+from bilibili_api import search, video
 from mcp.server.fastmcp import Context, FastMCP
 
+from bilibili_subtitle_fetch.credentials import (
+    CredentialManager,
+    CredentialStoreError,
+    initialize_credential_file,
+)
 from bilibili_subtitle_fetch.download_audio import download_audio
 from bilibili_subtitle_fetch.generate_subtitles import generate_subtitles
 
-BILIBILI_CREDENTIAL = Credential(
-    sessdata=os.environ.get("BILIBILI_SESSDATA"),
-    bili_jct=os.environ.get("BILIBILI_BILI_JCT"),
-    buvid3=os.environ.get("BILIBILI_BUVID3"),
-)
+CREDENTIAL_MANAGER = CredentialManager()
 
 BVID_PATTERN = re.compile(r"^BV[1-9A-HJ-NP-Za-km-z]{10}$")
 SHORT_LINK_HOSTS = {"b23.tv", "www.b23.tv", "bili2233.cn", "www.bili2233.cn"}
@@ -117,31 +117,6 @@ async def resolve_video_input(
     raise ValueError(f"Could not extract a valid bvid from the URL: {url}")
 
 
-def get_sessdata_expiry_error() -> Optional[str]:
-    sessdata = os.environ.get("BILIBILI_SESSDATA")
-    if not sessdata:
-        return None
-
-    try:
-        unquoted_sessdata = unquote(sessdata)
-        parts = unquoted_sessdata.split(",")
-        if len(parts) < 3:
-            return None
-        expiry_ts = int(parts[1])
-    except Exception:
-        return None
-
-    if time.time() <= expiry_ts:
-        return None
-
-    expiry_date = datetime.fromtimestamp(expiry_ts).strftime("%Y-%m-%d %H:%M:%S")
-    return (
-        f"Error: BILIBILI_SESSDATA expired on {expiry_date}. "
-        "Please update it in the environment variables. "
-        "Subtitles cannot be retrieved via API without valid login."
-    )
-
-
 def select_cid(info: dict[str, Any], page: Optional[int]) -> Optional[int]:
     pages = info.get("pages")
     if not page:
@@ -231,6 +206,20 @@ def get_effective_output_format(
     return output_format or DEFAULT_OUTPUT_FORMAT
 
 
+async def get_runtime_credential(ctx: Context) -> Any:
+    try:
+        credential, refresh_note = await CREDENTIAL_MANAGER.get_credential()
+    except CredentialStoreError as exc:
+        await ctx.log("error", str(exc))
+        raise ValueError(str(exc)) from exc
+
+    if refresh_note:
+        level = "warning" if "failed" in refresh_note.lower() else "info"
+        await ctx.log(level, refresh_note)
+
+    return credential
+
+
 @mcp.tool(
     name="get_bilibili_subtitle",
     description="Fetches subtitles for a given Bilibili video URL or BVID",
@@ -250,16 +239,12 @@ async def get_bilibili_subtitle(
         f"Received request for URL: {url}, BVID: {bvid}, lang: {preferred_lang}, format: {output_format}",
     )
 
-    expiry_error = get_sessdata_expiry_error()
-    if expiry_error:
-        await ctx.log("warning", expiry_error.removeprefix("Error: "))
-        return expiry_error
-
     try:
         resolved_bvid, page = await resolve_video_input(ctx, url, bvid)
         await ctx.log("info", f"Parsed bvid: {resolved_bvid}, page: {page}")
 
-        bilibili_video = video.Video(bvid=resolved_bvid, credential=BILIBILI_CREDENTIAL)
+        credential = await get_runtime_credential(ctx)
+        bilibili_video = video.Video(bvid=resolved_bvid, credential=credential)
         info = await bilibili_video.get_info()
         cid = select_cid(info, page)
         if not cid:
@@ -274,7 +259,7 @@ async def get_bilibili_subtitle(
             return (
                 "Info: No subtitles available for this video part. "
                 "This could happen if the video actually lacks subtitles, "
-                "or if the BILIBILI_SESSDATA is invalid/expired "
+                "or if the configured Bilibili cookie is invalid/expired "
                 "(Bilibili hides AI subtitles from unauthenticated API requests)."
             )
 
@@ -388,7 +373,8 @@ async def get_subtitle_from_audio(
             "info",
             f"Generating subtitles for bvid: {bvid} with model size: {model_size}",
         )
-        bilibili_video = video.Video(bvid=bvid, credential=BILIBILI_CREDENTIAL)
+        credential = await get_runtime_credential(ctx)
+        bilibili_video = video.Video(bvid=bvid, credential=credential)
         audio_file = await download_audio(bilibili_video)
         return await asyncio.to_thread(generate_subtitles, audio_file, type, model_size)
     except Exception as exc:
@@ -401,8 +387,20 @@ def main() -> None:
 
     global DEFAULT_OUTPUT_FORMAT
     global DEFAULT_PREFERRED_LANG
+    global CREDENTIAL_MANAGER
 
     parser = argparse.ArgumentParser(description="Bilibili Subtitle Fetch MCP Server")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["serve", "init"],
+        default="serve",
+        help="Run the MCP server or initialize the local credential file.",
+    )
+    parser.add_argument(
+        "--config",
+        help="Path to config.toml. Defaults to the user config directory.",
+    )
     parser.add_argument(
         "--preferred-lang",
         default=DEFAULT_PREFERRED_LANG,
@@ -416,8 +414,22 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.config:
+        CREDENTIAL_MANAGER.set_config_path(args.config)
+
+    if args.command == "init":
+        try:
+            initialize_credential_file(CREDENTIAL_MANAGER.config_path)
+        except CredentialStoreError as exc:
+            raise SystemExit(f"Error: {exc}") from exc
+        return
+
     DEFAULT_PREFERRED_LANG = args.preferred_lang
     DEFAULT_OUTPUT_FORMAT = args.output_format
+    try:
+        CREDENTIAL_MANAGER.validate_runtime_config()
+    except CredentialStoreError as exc:
+        raise SystemExit(f"Error: {exc}") from exc
     mcp.run()
 
 

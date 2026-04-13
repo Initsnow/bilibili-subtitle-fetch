@@ -9,6 +9,7 @@ dependencies = [
   "faster-whisper>=1.2.1",
   "httpx>=0.27.0",
   "mcp[cli]>=1.6.0",
+  "tomli>=2.0.1; python_version < '3.11'",
 ]
 authors = [{ name = "Initsnow" }]
 keywords = ["http", "mcp", "llm", "automation"]

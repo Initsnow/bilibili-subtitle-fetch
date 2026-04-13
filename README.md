@@ -1,6 +1,6 @@
 # Bilibili Subtitle Fetch
 
-MCP server for fetching Bilibili video subtitles with language and format options.
+一个用于获取 Bilibili 视频字幕的 MCP Server，支持语言和输出格式选项。
 
 `uv tool install --python 3.13 bilibili-subtitle-fetch`
 
@@ -10,17 +10,32 @@ MCP server for fetching Bilibili video subtitles with language and format option
 - 标准视频链接，例如 `https://www.bilibili.com/video/BV1fz4y1j7Mf?p=2`
 - 短链，例如 `https://b23.tv/FAm7Xn4`
 
-## Configuration
+## 配置
 
-### Environment Variables
+### 凭据配置文件
 
-- `BILIBILI_SESSDATA`, `BILIBILI_BILI_JCT`, `BILIBILI_BUVID3` - Required Bilibili credentials
-- `BILIBILI_PREFERRED_LANG` - Default subtitle language (default: zh-CN)
-- `BILIBILI_OUTPUT_FORMAT` - Subtitle format (text/timestamped, default: text)
+首次使用时执行 `bilibili-subtitle-fetch init`，然后粘贴你的 Bilibili Cookie。
 
-### CLI Arguments
+默认配置文件路径：
 
-- `--preferred-lang` - Override default subtitle language
-- `--output-format` - Override output format
+- Windows: `%APPDATA%\bilibili-subtitle-fetch\config.toml`
+- Linux/macOS: `~/.config/bilibili-subtitle-fetch/config.toml`
 
-[Get Bilibili credentials](https://nemo2011.github.io/bilibili-api/#/get-credential.md)
+也可以通过 `--config /path/to/config.toml` 指定自定义路径。
+
+配置文件会在 `[credential]` 下保存这些字段：
+
+- `sessdata` - 访问需要登录态的字幕接口时必需
+- `bili_jct` - 自动刷新时必需
+- `ac_time_value` - 自动刷新时必需
+- `buvid3`、`buvid4`、`dedeuserid` - 可选，但建议一并保存
+
+当 `sessdata`、`bili_jct` 和 `ac_time_value` 都存在时，服务会在发起需要登录态的请求前自动检查是否需要刷新 Cookie，并将新值回写到 `config.toml`，不需要手动执行刷新命令。
+
+### 运行参数
+
+- `--preferred-lang` - 覆盖默认字幕语言
+- `--output-format` - 覆盖默认输出格式
+- `--config` - 使用自定义配置文件路径
+
+[获取 Bilibili 凭据](https://nemo2011.github.io/bilibili-api/#/get-credential.md)
