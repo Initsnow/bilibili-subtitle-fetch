@@ -1,12 +1,14 @@
 import asyncio
 import os
 import re
+import sys
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Awaitable, Callable, Literal, Optional, TextIO
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+import pyperclip
 from bilibili_api import search, video
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -35,6 +37,7 @@ if DEFAULT_OUTPUT_FORMAT not in {"text", "timestamped"}:
     DEFAULT_OUTPUT_FORMAT = "text"
 
 mcp = FastMCP(name="bilibili-subtitle-fetch")
+LogHandler = Callable[[str, str], Awaitable[None]]
 
 
 def parse_bilibili_url(url: str) -> tuple[Optional[str], Optional[int]]:
@@ -76,22 +79,35 @@ async def resolve_bilibili_short_url(url: str) -> str:
         return str(response.url)
 
 
+async def log_message(
+    logger: Optional[LogHandler],
+    level: str,
+    message: str,
+) -> None:
+    if logger is not None:
+        await logger(level, message)
+
+
 async def resolve_video_input(
-    ctx: Context,
     url: Optional[str],
     bvid: Optional[str],
+    logger: Optional[LogHandler] = None,
 ) -> tuple[str, Optional[int]]:
     if url and bvid:
-        await ctx.log("error", "Both URL and BVID provided. Please provide only one.")
+        await log_message(
+            logger, "error", "Both URL and BVID provided. Please provide only one."
+        )
         raise ValueError("Both URL and BVID provided. Please provide only one.")
 
     if not url and not bvid:
-        await ctx.log("error", "Neither URL nor BVID provided. Please provide one.")
+        await log_message(
+            logger, "error", "Neither URL nor BVID provided. Please provide one."
+        )
         raise ValueError("Neither URL nor BVID provided. Please provide one.")
 
     if bvid:
         if not BVID_PATTERN.match(bvid):
-            await ctx.log("error", f"Invalid BVID format: {bvid}")
+            await log_message(logger, "error", f"Invalid BVID format: {bvid}")
             raise ValueError(f"Invalid BVID format: {bvid}")
         return bvid, None
 
@@ -101,19 +117,21 @@ async def resolve_video_input(
         return parsed_bvid, page
 
     if is_bilibili_short_url(url):
-        await ctx.log("info", f"Resolving Bilibili short URL: {url}")
+        await log_message(logger, "info", f"Resolving Bilibili short URL: {url}")
         try:
             resolved_url = await resolve_bilibili_short_url(url)
         except httpx.HTTPError as exc:
-            await ctx.log("error", f"Failed to resolve short URL {url}: {exc}")
+            await log_message(
+                logger, "error", f"Failed to resolve short URL {url}: {exc}"
+            )
             raise ValueError(f"Failed to resolve Bilibili short URL: {url}") from exc
 
-        await ctx.log("info", f"Resolved short URL to: {resolved_url}")
+        await log_message(logger, "info", f"Resolved short URL to: {resolved_url}")
         parsed_bvid, page = parse_bilibili_url(resolved_url)
         if parsed_bvid:
             return parsed_bvid, page
 
-    await ctx.log("error", f"Could not extract bvid from URL: {url}")
+    await log_message(logger, "error", f"Could not extract bvid from URL: {url}")
     raise ValueError(f"Could not extract a valid bvid from the URL: {url}")
 
 
@@ -206,18 +224,180 @@ def get_effective_output_format(
     return output_format or DEFAULT_OUTPUT_FORMAT
 
 
-async def get_runtime_credential(ctx: Context) -> Any:
+async def get_runtime_credential(logger: Optional[LogHandler] = None) -> Any:
     try:
         credential, refresh_note = await CREDENTIAL_MANAGER.get_credential()
     except CredentialStoreError as exc:
-        await ctx.log("error", str(exc))
+        await log_message(logger, "error", str(exc))
         raise ValueError(str(exc)) from exc
 
     if refresh_note:
         level = "warning" if "failed" in refresh_note.lower() else "info"
-        await ctx.log(level, refresh_note)
+        await log_message(logger, level, refresh_note)
 
     return credential
+
+
+def parse_cli_video_input(video_input: str) -> tuple[Optional[str], Optional[str]]:
+    normalized = video_input.strip()
+    if normalized.startswith("BV"):
+        return None, normalized
+    return normalized, None
+
+
+def format_subtitle_fetch_error(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return f"Error: {exc}"
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        detail = f"HTTP Status {exc.response.status_code}"
+        try:
+            detail += f" - Response: {exc.response.text[:200]}"
+        except Exception:
+            pass
+        return f"Error fetching subtitle content: {detail}"
+
+    if isinstance(exc, httpx.RequestError):
+        return f"Error fetching subtitle content (network issue): {exc}"
+
+    return f"An unexpected error occurred: {type(exc).__name__} - {exc}"
+
+
+async def log_subtitle_fetch_error(
+    exc: Exception,
+    logger: Optional[LogHandler] = None,
+) -> None:
+    if isinstance(exc, ValueError):
+        return
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        await log_message(
+            logger,
+            "error",
+            "HTTP error fetching subtitle content: "
+            f"{exc.response.status_code} for URL {exc.request.url}",
+        )
+        return
+
+    if isinstance(exc, httpx.RequestError):
+        request_url = exc.request.url if exc.request else "unknown"
+        await log_message(
+            logger,
+            "error",
+            f"Network error fetching subtitle content for URL {request_url}: {exc}",
+        )
+        return
+
+    await log_message(logger, "error", f"An unexpected error occurred: {exc}")
+
+
+async def fetch_bilibili_subtitle_text(
+    url: Optional[str] = None,
+    bvid: Optional[str] = None,
+    preferred_lang: Optional[str] = None,
+    output_format: Optional[Literal["text", "timestamped"]] = None,
+    logger: Optional[LogHandler] = None,
+) -> str:
+    preferred_lang = get_effective_preferred_lang(preferred_lang)
+    output_format = get_effective_output_format(output_format)
+
+    await log_message(
+        logger,
+        "info",
+        "Received request for URL: "
+        f"{url}, BVID: {bvid}, lang: {preferred_lang}, format: {output_format}",
+    )
+
+    resolved_bvid, page = await resolve_video_input(url, bvid, logger=logger)
+    await log_message(logger, "info", f"Parsed bvid: {resolved_bvid}, page: {page}")
+
+    credential = await get_runtime_credential(logger)
+    bilibili_video = video.Video(bvid=resolved_bvid, credential=credential)
+    info = await bilibili_video.get_info()
+    cid = select_cid(info, page)
+    if not cid:
+        await log_message(logger, "error", "Could not determine CID for the video.")
+        raise ValueError("Could not determine the video part (CID).")
+
+    available_subtitles = (await bilibili_video.get_subtitle(cid=cid)).get(
+        "subtitles", []
+    )
+    if not available_subtitles:
+        await log_message(logger, "warning", "No subtitles found for this video part.")
+        return (
+            "Info: No subtitles available for this video part. "
+            "This could happen if the video actually lacks subtitles, "
+            "or if the configured Bilibili cookie is invalid/expired "
+            "(Bilibili hides AI subtitles from unauthenticated API requests)."
+        )
+
+    subtitle_url, found_lang = choose_subtitle(available_subtitles, preferred_lang)
+    subtitle_url = normalize_subtitle_url(subtitle_url)
+    if not subtitle_url:
+        await log_message(logger, "error", "Could not find any valid subtitle URL.")
+        raise ValueError("Could not find any subtitle URL in the metadata.")
+
+    await log_message(
+        logger,
+        "info",
+        f"Fetching subtitle content from: {subtitle_url} (Language: {found_lang})",
+    )
+    subtitle_data = await fetch_subtitle_data(subtitle_url, resolved_bvid)
+    body = subtitle_data.get("body", [])
+    if not body:
+        await log_message(logger, "warning", "Subtitle file fetched but contains no content.")
+        return "Info: Subtitle file is empty."
+
+    formatted_subtitle = format_subtitle_body(body, output_format)
+    await log_message(logger, "info", f"Formatted subtitles as {output_format}.")
+    return formatted_subtitle
+
+
+def copy_to_clipboard(text: str) -> None:
+    try:
+        pyperclip.copy(text)
+    except pyperclip.PyperclipException as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def run_fetch_command(
+    video_input: str,
+    preferred_lang: str,
+    output_format: Literal["text", "timestamped"],
+    copy_result: bool = True,
+    stdout: Optional[TextIO] = None,
+    stderr: Optional[TextIO] = None,
+) -> None:
+    stdout = stdout or sys.stdout
+    stderr = stderr or sys.stderr
+    url, bvid = parse_cli_video_input(video_input)
+
+    try:
+        subtitle = asyncio.run(
+            fetch_bilibili_subtitle_text(
+                url=url,
+                bvid=bvid,
+                preferred_lang=preferred_lang,
+                output_format=output_format,
+            )
+        )
+    except Exception as exc:
+        raise SystemExit(format_subtitle_fetch_error(exc)) from exc
+
+    print(subtitle, file=stdout)
+
+    if not copy_result:
+        return
+
+    try:
+        copy_to_clipboard(subtitle)
+    except Exception as exc:
+        print(
+            f"Warning: Failed to copy subtitles to clipboard: {exc}",
+            file=stderr,
+        )
+    else:
+        print("Copied subtitles to clipboard.", file=stderr)
 
 
 @mcp.tool(
@@ -231,81 +411,17 @@ async def get_bilibili_subtitle(
     preferred_lang: Optional[str] = None,
     output_format: Optional[Literal["text", "timestamped"]] = None,
 ) -> str:
-    preferred_lang = get_effective_preferred_lang(preferred_lang)
-    output_format = get_effective_output_format(output_format)
-
-    await ctx.log(
-        "info",
-        f"Received request for URL: {url}, BVID: {bvid}, lang: {preferred_lang}, format: {output_format}",
-    )
-
     try:
-        resolved_bvid, page = await resolve_video_input(ctx, url, bvid)
-        await ctx.log("info", f"Parsed bvid: {resolved_bvid}, page: {page}")
-
-        credential = await get_runtime_credential(ctx)
-        bilibili_video = video.Video(bvid=resolved_bvid, credential=credential)
-        info = await bilibili_video.get_info()
-        cid = select_cid(info, page)
-        if not cid:
-            await ctx.log("error", "Could not determine CID for the video.")
-            return "Error: Could not determine the video part (CID)."
-
-        available_subtitles = (await bilibili_video.get_subtitle(cid=cid)).get(
-            "subtitles", []
+        return await fetch_bilibili_subtitle_text(
+            url=url,
+            bvid=bvid,
+            preferred_lang=preferred_lang,
+            output_format=output_format,
+            logger=ctx.log,
         )
-        if not available_subtitles:
-            await ctx.log("warning", "No subtitles found for this video part.")
-            return (
-                "Info: No subtitles available for this video part. "
-                "This could happen if the video actually lacks subtitles, "
-                "or if the configured Bilibili cookie is invalid/expired "
-                "(Bilibili hides AI subtitles from unauthenticated API requests)."
-            )
-
-        subtitle_url, found_lang = choose_subtitle(available_subtitles, preferred_lang)
-        subtitle_url = normalize_subtitle_url(subtitle_url)
-        if not subtitle_url:
-            await ctx.log("error", "Could not find any valid subtitle URL.")
-            return "Error: Could not find any subtitle URL in the metadata."
-
-        await ctx.log(
-            "info",
-            f"Fetching subtitle content from: {subtitle_url} (Language: {found_lang})",
-        )
-        subtitle_data = await fetch_subtitle_data(subtitle_url, resolved_bvid)
-        body = subtitle_data.get("body", [])
-        if not body:
-            await ctx.log("warning", "Subtitle file fetched but contains no content.")
-            return "Info: Subtitle file is empty."
-
-        formatted_subtitle = format_subtitle_body(body, output_format)
-        await ctx.log("info", f"Formatted subtitles as {output_format}.")
-        return formatted_subtitle
-
-    except ValueError as exc:
-        return f"Error: {exc}"
-    except httpx.HTTPStatusError as exc:
-        await ctx.log(
-            "error",
-            f"HTTP error fetching subtitle content: {exc.response.status_code} for URL {exc.request.url}",
-        )
-        detail = f"HTTP Status {exc.response.status_code}"
-        try:
-            detail += f" - Response: {exc.response.text[:200]}"
-        except Exception:
-            pass
-        return f"Error fetching subtitle content: {detail}"
-    except httpx.RequestError as exc:
-        request_url = exc.request.url if exc.request else "unknown"
-        await ctx.log(
-            "error",
-            f"Network error fetching subtitle content for URL {request_url}: {exc}",
-        )
-        return f"Error fetching subtitle content (network issue): {exc}"
     except Exception as exc:
-        await ctx.log("error", f"An unexpected error occurred: {exc}")
-        return f"An unexpected error occurred: {type(exc).__name__} - {exc}"
+        await log_subtitle_fetch_error(exc, logger=ctx.log)
+        return format_subtitle_fetch_error(exc)
 
 
 class TimeRange(Enum):
@@ -373,7 +489,7 @@ async def get_subtitle_from_audio(
             "info",
             f"Generating subtitles for bvid: {bvid} with model size: {model_size}",
         )
-        credential = await get_runtime_credential(ctx)
+        credential = await get_runtime_credential(ctx.log)
         bilibili_video = video.Video(bvid=bvid, credential=credential)
         audio_file = await download_audio(bilibili_video)
         return await asyncio.to_thread(generate_subtitles, audio_file, type, model_size)
@@ -393,9 +509,14 @@ def main() -> None:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["serve", "init"],
+        choices=["serve", "init", "fetch"],
         default="serve",
-        help="Run the MCP server or initialize the local credential file.",
+        help="Run the MCP server, initialize credentials, or fetch subtitles locally.",
+    )
+    parser.add_argument(
+        "video_input",
+        nargs="?",
+        help="BVID or video URL for the fetch command.",
     )
     parser.add_argument(
         "--config",
@@ -412,6 +533,11 @@ def main() -> None:
         choices=["text", "timestamped"],
         help="Subtitle output format (text or timestamped)",
     )
+    parser.add_argument(
+        "--no-clipboard",
+        action="store_true",
+        help="Do not copy fetched subtitles to the clipboard.",
+    )
     args = parser.parse_args()
 
     if args.config:
@@ -422,6 +548,17 @@ def main() -> None:
             initialize_credential_file(CREDENTIAL_MANAGER.config_path)
         except CredentialStoreError as exc:
             raise SystemExit(f"Error: {exc}") from exc
+        return
+
+    if args.command == "fetch":
+        if not args.video_input:
+            raise SystemExit("Error: fetch requires a BVID or video URL.")
+        run_fetch_command(
+            args.video_input,
+            preferred_lang=args.preferred_lang,
+            output_format=args.output_format,
+            copy_result=not args.no_clipboard,
+        )
         return
 
     DEFAULT_PREFERRED_LANG = args.preferred_lang

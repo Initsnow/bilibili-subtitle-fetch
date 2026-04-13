@@ -38,4 +38,21 @@
 - `--output-format` - 覆盖默认输出格式
 - `--config` - 使用自定义配置文件路径
 
+## CLI 用法
+
+先执行 `bilibili-subtitle-fetch init` 配置 Cookie，然后可以直接在终端获取字幕：
+
+```bash
+bilibili-subtitle-fetch fetch BV1fz4y1j7Mf
+bilibili-subtitle-fetch fetch "https://www.bilibili.com/video/BV1fz4y1j7Mf?p=2"
+```
+
+命令会把字幕输出到标准输出，并在成功后自动复制到剪贴板。
+
+可选参数：
+
+- `--preferred-lang` - 指定优先字幕语言
+- `--output-format text|timestamped` - 指定输出格式
+- `--no-clipboard` - 只输出，不复制到剪贴板
+
 [获取 Bilibili 凭据](https://nemo2011.github.io/bilibili-api/#/get-credential.md)
