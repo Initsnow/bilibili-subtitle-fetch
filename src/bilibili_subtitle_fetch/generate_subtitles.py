@@ -39,7 +39,7 @@ def format_timestamp(seconds: float) -> str:
 def generate_subtitles(
     audio: BinaryIO,
     type: Literal["text", "timestamped"],
-    model_size: str = "base",
+    model_size: str = "tiny",
 ) -> str:
     device = get_device()
     compute_type = "int8" if device == "cpu" else "default"
@@ -54,7 +54,7 @@ def generate_subtitles(
     )
 
     print("Transcribing...")
-    segments, _ = model.transcribe(audio)
+    segments, _ = model.transcribe(audio, vad_filter=True)
 
     if type == "text":
         return "\n".join(segment.text.strip() for segment in segments)

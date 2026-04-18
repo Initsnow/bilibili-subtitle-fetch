@@ -41,7 +41,7 @@ if DEFAULT_OUTPUT_FORMAT not in {"text", "timestamped"}:
 # enable_asr=True means: fall back to audio transcription when no subtitle track exists.
 _env_enable_asr = os.environ.get("BILIBILI_ENABLE_ASR", "").strip().lower()
 DEFAULT_ENABLE_ASR: bool = _env_enable_asr not in {"0", "false", "no"}
-DEFAULT_ASR_MODEL_SIZE: str = os.environ.get("BILIBILI_ASR_MODEL_SIZE", "base")
+DEFAULT_ASR_MODEL_SIZE: str = os.environ.get("BILIBILI_ASR_MODEL_SIZE", "tiny")
 
 mcp = FastMCP(name="bilibili-subtitle-fetch")
 LogHandler = Callable[[str, str], Awaitable[None]]
@@ -374,6 +374,7 @@ def copy_to_clipboard(text: str) -> None:
 
 @mcp.tool(
     name="get_bilibili_subtitle",
+    description="Fetch video subtitles. You should automatically try to correct any ASR errors in the returned text.",
 )
 async def get_bilibili_subtitle(
     ctx: Context,
