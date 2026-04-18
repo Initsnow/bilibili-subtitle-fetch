@@ -369,53 +369,11 @@ def copy_to_clipboard(text: str) -> None:
         raise RuntimeError(str(exc)) from exc
 
 
-def run_fetch_command(
-    video_input: str,
-    preferred_lang: str,
-    output_format: Literal["text", "timestamped"],
-    copy_result: bool = True,
-    stdout: Optional[TextIO] = None,
-    stderr: Optional[TextIO] = None,
-) -> None:
-    stdout = stdout or sys.stdout
-    stderr = stderr or sys.stderr
-    url, bvid = parse_cli_video_input(video_input)
 
-    try:
-        subtitle = asyncio.run(
-            fetch_bilibili_subtitle_text(
-                url=url,
-                bvid=bvid,
-                preferred_lang=preferred_lang,
-                output_format=output_format,
-            )
-        )
-    except Exception as exc:
-        raise SystemExit(format_subtitle_fetch_error(exc)) from exc
-
-    print(subtitle, file=stdout)
-
-    if not copy_result:
-        return
-
-    try:
-        copy_to_clipboard(subtitle)
-    except Exception as exc:
-        print(
-            f"Warning: Failed to copy subtitles to clipboard: {exc}",
-            file=stderr,
-        )
-    else:
-        print("Copied subtitles to clipboard.", file=stderr)
 
 
 @mcp.tool(
     name="get_bilibili_subtitle",
-    description=(
-        "Fetches subtitles for a given Bilibili video URL or BVID. "
-        "First tries to retrieve the official subtitle track; if none is available "
-        "and ASR is enabled (configured by the user), falls back to audio transcription."
-    ),
 )
 async def get_bilibili_subtitle(
     ctx: Context,
@@ -461,7 +419,6 @@ class TimeRange(Enum):
 
 @mcp.tool(
     name="search_bilibili_videos",
-    description="Searches for Bilibili videos.",
 )
 async def search_bilibili_videos(
     keyword: str,
@@ -495,7 +452,6 @@ async def search_bilibili_videos(
 
 @mcp.tool(
     name="get_bilibili_video_desc",
-    description="Fetches the description of a Bilibili video by its BVID.",
 )
 async def get_bilibili_video_desc(bvid: str) -> str:
     result = await video.Video(bvid=bvid).get_info()

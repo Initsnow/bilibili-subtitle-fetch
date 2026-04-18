@@ -32,6 +32,12 @@
 
 当 `sessdata`、`bili_jct` 和 `ac_time_value` 都存在时，服务会在发起需要登录态的请求前自动检查是否需要刷新 Cookie，并将新值回写到 `config.toml`，不需要手动执行刷新命令。
 
+### ASR 配置 (可选)
+
+配置文件同样支持 `[asr]` 段落配置默认的音频转写行为：
+
+- `enable_asr` - 是否开启 ASR 回退 (true/false)。开启后，如果视频未提供自带字幕，程序会自动下载音频并生成字幕。
+- `model_size` - Whisper 模型大小，默认为 `base`。也可以选用 `tiny`、`small` 等。
 ### 运行参数
 
 - `--preferred-lang` - 覆盖默认字幕语言
@@ -54,5 +60,7 @@ bilibili-subtitle-fetch fetch "https://www.bilibili.com/video/BV1fz4y1j7Mf?p=2"
 - `--preferred-lang` - 指定优先字幕语言
 - `--output-format text|timestamped` - 指定输出格式
 - `--no-clipboard` - 只输出，不复制到剪贴板
+- `--asr` - 强制启用 ASR 语音识别回退
+- `--no-asr` - 强制关闭 ASR 语音识别回退
 
 [获取 Bilibili 凭据](https://nemo2011.github.io/bilibili-api/#/get-credential.md)
