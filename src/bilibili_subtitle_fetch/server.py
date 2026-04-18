@@ -16,6 +16,7 @@ from bilibili_subtitle_fetch.credentials import (
     CredentialManager,
     CredentialStoreError,
     initialize_credential_file,
+    load_asr_config,
 )
 from bilibili_subtitle_fetch.download_audio import download_audio
 from bilibili_subtitle_fetch.generate_subtitles import generate_subtitles
@@ -35,6 +36,12 @@ DEFAULT_OUTPUT_FORMAT: Literal["text", "timestamped"] = os.environ.get(
 )
 if DEFAULT_OUTPUT_FORMAT not in {"text", "timestamped"}:
     DEFAULT_OUTPUT_FORMAT = "text"
+
+# ASR defaults — can be overridden by [asr] section in config.toml or env vars.
+# enable_asr=True means: fall back to audio transcription when no subtitle track exists.
+_env_enable_asr = os.environ.get("BILIBILI_ENABLE_ASR", "").strip().lower()
+DEFAULT_ENABLE_ASR: bool = _env_enable_asr not in {"0", "false", "no"}
+DEFAULT_ASR_MODEL_SIZE: str = os.environ.get("BILIBILI_ASR_MODEL_SIZE", "base")
 
 mcp = FastMCP(name="bilibili-subtitle-fetch")
 LogHandler = Callable[[str, str], Awaitable[None]]
@@ -345,7 +352,9 @@ async def fetch_bilibili_subtitle_text(
     subtitle_data = await fetch_subtitle_data(subtitle_url, resolved_bvid)
     body = subtitle_data.get("body", [])
     if not body:
-        await log_message(logger, "warning", "Subtitle file fetched but contains no content.")
+        await log_message(
+            logger, "warning", "Subtitle file fetched but contains no content."
+        )
         return "Info: Subtitle file is empty."
 
     formatted_subtitle = format_subtitle_body(body, output_format)
@@ -402,7 +411,11 @@ def run_fetch_command(
 
 @mcp.tool(
     name="get_bilibili_subtitle",
-    description="Fetches subtitles for a given Bilibili video URL or BVID",
+    description=(
+        "Fetches subtitles for a given Bilibili video URL or BVID. "
+        "First tries to retrieve the official subtitle track; if none is available "
+        "and ASR is enabled (configured by the user), falls back to audio transcription."
+    ),
 )
 async def get_bilibili_subtitle(
     ctx: Context,
@@ -412,13 +425,28 @@ async def get_bilibili_subtitle(
     output_format: Optional[Literal["text", "timestamped"]] = None,
 ) -> str:
     try:
-        return await fetch_bilibili_subtitle_text(
+        result = await fetch_bilibili_subtitle_text(
             url=url,
             bvid=bvid,
             preferred_lang=preferred_lang,
             output_format=output_format,
             logger=ctx.log,
         )
+        # If no subtitle track was found and ASR is enabled, fall back to audio.
+        if result.startswith("Info: No subtitles") and DEFAULT_ENABLE_ASR:
+            await ctx.log(
+                "info",
+                f"No subtitle track found. Falling back to ASR (model: {DEFAULT_ASR_MODEL_SIZE}).",
+            )
+            resolved_bvid, _page = await resolve_video_input(url, bvid, logger=ctx.log)
+            credential = await get_runtime_credential(ctx.log)
+            bilibili_video = video.Video(bvid=resolved_bvid, credential=credential)
+            audio_file = await download_audio(bilibili_video)
+            effective_format = get_effective_output_format(output_format)
+            return await asyncio.to_thread(
+                generate_subtitles, audio_file, effective_format, DEFAULT_ASR_MODEL_SIZE
+            )
+        return result
     except Exception as exc:
         await log_subtitle_fetch_error(exc, logger=ctx.log)
         return format_subtitle_fetch_error(exc)
@@ -474,28 +502,78 @@ async def get_bilibili_video_desc(bvid: str) -> str:
     return result["desc"].strip()
 
 
-@mcp.tool(
-    name="get_subtitle_from_audio",
-    description="Generates subtitles from a Bilibili video by its BVID. Default model size is 'base'.",
-)
-async def get_subtitle_from_audio(
-    ctx: Context,
-    bvid: str,
-    type: Literal["text", "timestamped"] = "text",
-    model_size: Literal["tiny", "base", "small", "medium", "large"] = "base",
-) -> str:
-    try:
-        await ctx.log(
-            "info",
-            f"Generating subtitles for bvid: {bvid} with model size: {model_size}",
+def _apply_asr_config_from_file() -> None:
+    """Load [asr] section from config.toml and update module-level ASR defaults."""
+    global DEFAULT_ENABLE_ASR, DEFAULT_ASR_MODEL_SIZE
+    asr_cfg = load_asr_config(CREDENTIAL_MANAGER.config_path)
+    if "enable_asr" in asr_cfg:
+        val = asr_cfg["enable_asr"]
+        if isinstance(val, bool):
+            DEFAULT_ENABLE_ASR = val
+        elif isinstance(val, str):
+            DEFAULT_ENABLE_ASR = val.strip().lower() not in {"0", "false", "no"}
+    if "model_size" in asr_cfg:
+        val = asr_cfg["model_size"]
+        if isinstance(val, str) and val.strip():
+            DEFAULT_ASR_MODEL_SIZE = val.strip()
+
+
+def run_fetch_command(
+    video_input: str,
+    preferred_lang: str,
+    output_format: Literal["text", "timestamped"],
+    copy_result: bool = True,
+    use_asr: Optional[bool] = None,
+    stdout: Optional[TextIO] = None,
+    stderr: Optional[TextIO] = None,
+) -> None:
+    stdout = stdout or sys.stdout
+    stderr = stderr or sys.stderr
+    url, bvid = parse_cli_video_input(video_input)
+
+    # Resolve effective ASR setting for this invocation.
+    effective_enable_asr = DEFAULT_ENABLE_ASR if use_asr is None else use_asr
+
+    async def _fetch() -> str:
+        result = await fetch_bilibili_subtitle_text(
+            url=url,
+            bvid=bvid,
+            preferred_lang=preferred_lang,
+            output_format=output_format,
         )
-        credential = await get_runtime_credential(ctx.log)
-        bilibili_video = video.Video(bvid=bvid, credential=credential)
-        audio_file = await download_audio(bilibili_video)
-        return await asyncio.to_thread(generate_subtitles, audio_file, type, model_size)
+        if result.startswith("Info: No subtitles") and effective_enable_asr:
+            print(
+                f"No subtitle track found. Falling back to ASR (model: {DEFAULT_ASR_MODEL_SIZE})…",
+                file=stderr,
+            )
+            resolved_bvid, _page = await resolve_video_input(url, bvid)
+            credential = await get_runtime_credential()
+            bilibili_video = video.Video(bvid=resolved_bvid, credential=credential)
+            audio_file = await download_audio(bilibili_video)
+            return await asyncio.to_thread(
+                generate_subtitles, audio_file, output_format, DEFAULT_ASR_MODEL_SIZE
+            )
+        return result
+
+    try:
+        subtitle = asyncio.run(_fetch())
     except Exception as exc:
-        await ctx.log("error", f"Error: {exc}")
-        return f"Error: {exc}"
+        raise SystemExit(format_subtitle_fetch_error(exc)) from exc
+
+    print(subtitle, file=stdout)
+
+    if not copy_result:
+        return
+
+    try:
+        copy_to_clipboard(subtitle)
+    except Exception as exc:
+        print(
+            f"Warning: Failed to copy subtitles to clipboard: {exc}",
+            file=stderr,
+        )
+    else:
+        print("Copied subtitles to clipboard.", file=stderr)
 
 
 def main() -> None:
@@ -538,6 +616,20 @@ def main() -> None:
         action="store_true",
         help="Do not copy fetched subtitles to the clipboard.",
     )
+
+    # ASR flags (only relevant for `fetch` and `serve` commands)
+    asr_group = parser.add_mutually_exclusive_group()
+    asr_group.add_argument(
+        "--no-asr",
+        action="store_true",
+        help="Disable ASR fallback even if it is enabled in config.",
+    )
+    asr_group.add_argument(
+        "--asr",
+        action="store_true",
+        help="Force-enable ASR fallback for this invocation.",
+    )
+
     args = parser.parse_args()
 
     if args.config:
@@ -550,14 +642,24 @@ def main() -> None:
             raise SystemExit(f"Error: {exc}") from exc
         return
 
+    # Resolve CLI ASR override (None means "use config/env default").
+    cli_asr_override: Optional[bool] = None
+    if args.no_asr:
+        cli_asr_override = False
+    elif args.asr:
+        cli_asr_override = True
+
     if args.command == "fetch":
         if not args.video_input:
             raise SystemExit("Error: fetch requires a BVID or video URL.")
+        # Load ASR settings from config file before running.
+        _apply_asr_config_from_file()
         run_fetch_command(
             args.video_input,
             preferred_lang=args.preferred_lang,
             output_format=args.output_format,
             copy_result=not args.no_clipboard,
+            use_asr=cli_asr_override,
         )
         return
 
@@ -567,6 +669,8 @@ def main() -> None:
         CREDENTIAL_MANAGER.validate_runtime_config()
     except CredentialStoreError as exc:
         raise SystemExit(f"Error: {exc}") from exc
+    # Load ASR settings from config file for the MCP server.
+    _apply_asr_config_from_file()
     mcp.run()
 
 

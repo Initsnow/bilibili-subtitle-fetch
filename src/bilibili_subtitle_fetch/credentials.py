@@ -21,6 +21,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
 CONFIG_SECTION = "credential"
+CONFIG_ASR_SECTION = "asr"
 
 
 class CredentialStoreError(RuntimeError):
@@ -160,6 +161,20 @@ def load_stored_credential(config_path: Path) -> StoredCredential:
         ) from exc
 
     return StoredCredential.from_mapping(data.get(CONFIG_SECTION))
+
+
+def load_asr_config(config_path: Path) -> dict[str, object]:
+    """Load the [asr] section from config.toml, returning a plain dict."""
+    if not config_path.exists():
+        return {}
+    try:
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    section = data.get(CONFIG_ASR_SECTION)
+    if not isinstance(section, dict):
+        return {}
+    return section
 
 
 def save_stored_credential(config_path: Path, stored: StoredCredential) -> None:
