@@ -184,6 +184,24 @@ def normalize_subtitle_url(subtitle_url: Optional[str]) -> Optional[str]:
     return None
 
 
+def extract_subtitles_from_response(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    subtitle = payload.get("subtitle")
+    if isinstance(subtitle, dict):
+        subtitles = subtitle.get("subtitles")
+        if isinstance(subtitles, list):
+            return subtitles
+
+    data = payload.get("data")
+    if isinstance(data, dict):
+        subtitle = data.get("subtitle")
+        if isinstance(subtitle, dict):
+            subtitles = subtitle.get("subtitles")
+            if isinstance(subtitles, list):
+                return subtitles
+
+    return []
+
+
 def format_timestamp(seconds: float) -> str:
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
@@ -213,12 +231,40 @@ def format_subtitle_body(
 
 async def fetch_subtitle_data(subtitle_url: str, bvid: str) -> dict[str, Any]:
     headers = {
+        "User-Agent": DEFAULT_USER_AGENT,
         "Referer": f"https://www.bilibili.com/video/{bvid}/",
     }
     async with create_httpx_client(headers=headers) as client:
         response = await client.get(subtitle_url)
         response.raise_for_status()
         return response.json()
+
+
+async def fetch_available_subtitles(
+    aid: int,
+    cid: int,
+    bvid: str,
+    credential: Any,
+) -> list[dict[str, Any]]:
+    headers = {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Referer": f"https://www.bilibili.com/video/{bvid}/",
+    }
+    params = {"aid": aid, "oid": cid, "type": 1}
+    async with create_httpx_client(
+        headers=headers,
+        cookies=credential.get_cookies(),
+    ) as client:
+        response = await client.get("https://api.bilibili.com/x/v2/dm/view", params=params)
+        response.raise_for_status()
+        payload = response.json()
+
+    code = payload.get("code")
+    if code not in (None, 0):
+        message = payload.get("message") or payload.get("msg") or "unknown error"
+        raise ValueError(f"Failed to fetch subtitle metadata: {message} (code: {code})")
+
+    return extract_subtitles_from_response(payload)
 
 
 def get_effective_preferred_lang(preferred_lang: Optional[str]) -> str:
@@ -326,8 +372,21 @@ async def fetch_bilibili_subtitle_text(
         await log_message(logger, "error", "Could not determine CID for the video.")
         raise ValueError("Could not determine the video part (CID).")
 
-    available_subtitles = (await bilibili_video.get_subtitle(cid=cid)).get(
-        "subtitles", []
+    aid = info.get("aid")
+    if not aid:
+        await log_message(logger, "error", "Could not determine AID for the video.")
+        raise ValueError("Could not determine the video aid.")
+
+    await log_message(
+        logger,
+        "info",
+        f"Fetching subtitle track list via x/v2/dm/view (aid={aid}, cid={cid}).",
+    )
+    available_subtitles = await fetch_available_subtitles(
+        aid=aid,
+        cid=cid,
+        bvid=resolved_bvid,
+        credential=credential,
     )
     if not available_subtitles:
         await log_message(logger, "warning", "No subtitles found for this video part.")

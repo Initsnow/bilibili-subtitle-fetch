@@ -1,11 +1,14 @@
+import asyncio
 import io
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from bilibili_subtitle_fetch.credentials import CredentialStoreError
 from bilibili_subtitle_fetch.server import (
     choose_subtitle,
     copy_to_clipboard,
+    extract_subtitles_from_response,
+    fetch_bilibili_subtitle_text,
     format_subtitle_body,
     main,
     normalize_subtitle_url,
@@ -71,6 +74,22 @@ class ServerHelpersTest(unittest.TestCase):
             "https://i0.hdslb.com/subtitle.json",
         )
         self.assertIsNone(normalize_subtitle_url("ftp://invalid"))
+
+    def test_extract_subtitles_from_response_reads_wrapped_payload(self) -> None:
+        payload = {
+            "code": 0,
+            "data": {
+                "subtitle": {
+                    "subtitles": [
+                        {"lan": "ai-zh", "subtitle_url": "//ai.example"},
+                    ]
+                }
+            },
+        }
+        self.assertEqual(
+            extract_subtitles_from_response(payload),
+            [{"lan": "ai-zh", "subtitle_url": "//ai.example"}],
+        )
 
     def test_format_subtitle_body_text(self) -> None:
         body = [
@@ -154,6 +173,40 @@ class ServerHelpersTest(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "字幕内容\n")
         self.assertIn("Warning: Failed to copy subtitles to clipboard", stderr.getvalue())
 
+    def test_fetch_bilibili_subtitle_text_uses_dm_view_tracks(self) -> None:
+        fake_video = MagicMock()
+        fake_video.get_info = AsyncMock(return_value={"aid": 200, "cid": 100})
+        fake_video.get_subtitle = AsyncMock(
+            side_effect=AssertionError("legacy get_subtitle path should not be used")
+        )
+
+        with patch(
+            "bilibili_subtitle_fetch.server.get_runtime_credential",
+            new=AsyncMock(return_value=MagicMock(get_cookies=MagicMock(return_value={}))),
+        ), patch(
+            "bilibili_subtitle_fetch.server.video.Video",
+            return_value=fake_video,
+        ), patch(
+            "bilibili_subtitle_fetch.server.fetch_available_subtitles",
+            new=AsyncMock(
+                return_value=[
+                    {"lan": "ai-zh", "subtitle_url": "//ai.example", "ai_type": 0}
+                ]
+            ),
+        ) as subtitles_mock, patch(
+            "bilibili_subtitle_fetch.server.fetch_subtitle_data",
+            new=AsyncMock(return_value={"body": [{"content": "字幕内容"}]}),
+        ):
+            result = asyncio.run(fetch_bilibili_subtitle_text(bvid="BV1fz4y1j7Mf"))
+
+        subtitles_mock.assert_awaited_once_with(
+            aid=200,
+            cid=100,
+            bvid="BV1fz4y1j7Mf",
+            credential=unittest.mock.ANY,
+        )
+        self.assertEqual(result, "字幕内容")
+
     def test_main_errors_when_config_missing(self) -> None:
         with patch(
             "bilibili_subtitle_fetch.server.CREDENTIAL_MANAGER.validate_runtime_config",
@@ -194,6 +247,7 @@ class ServerHelpersTest(unittest.TestCase):
             preferred_lang="zh-CN",
             output_format="timestamped",
             copy_result=False,
+            use_asr=None,
         )
 
 
