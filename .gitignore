@@ -5,10 +5,19 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # Virtual environments
-.venv
+.venv/
 
 tmp/
 .openmcp/
 .env
+
+# Generated subtitle/article outputs
+subtitles/
+result/

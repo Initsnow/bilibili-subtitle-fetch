@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bilibili Subtitle Writer"
+  short_description: "Fetch Bilibili subtitles and write summaries"
+  default_prompt: "Use $bilibili-subtitle-writer to fetch subtitles from a Bilibili video and turn them into a concise article."
