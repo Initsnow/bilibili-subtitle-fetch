@@ -7,7 +7,7 @@ description: Fetch Bilibili subtitles with this repository's bilibili-subtitle-f
 
 ## Overview
 
-Use this repository's `bilibili-subtitle-fetch` command through `uv run` to obtain Bilibili subtitles, then transform the transcript into either a compact summary or a polished Chinese article/tutorial. Preserve the video's meaning, correct obvious ASR mistakes from context, and avoid adding external facts unless the user explicitly asks for a separate fact-check.
+Use this repository's `bilibili-subtitle-fetch` command through `uv run` to obtain Bilibili subtitles, then transform the transcript into either study notes, a compact summary, or a polished Chinese article/tutorial. Preserve the video's meaning, correct obvious ASR mistakes from context, and avoid adding external facts unless the user explicitly asks for a separate fact-check.
 
 ## Workflow
 
@@ -38,7 +38,7 @@ Then retry the fetch command.
 
 6. Inspect the fetched subtitle file before writing. If it is empty, mostly error text, or clearly not the requested video, stop and report the problem.
 7. Write the requested deliverable:
-   - For summaries, produce concise sectioned notes with key claims, steps, definitions, examples, and caveats from the transcript.
+   - For summaries, choose detail level from content structure and the user's wording. When the transcript teaches a repeatable process, method, tool use, workflow, or reasoning sequence, produce reconstructable study notes by default: preserve distinct teaching points, operation order, important settings or parameters when present, examples, caveats, and decision rules. Produce a compact summary for narrative, commentary, interview, or news-like content, or when the user explicitly asks for a short/brief/quick summary, TL;DR, or high-level overview.
    - For articles or tutorials, first read `references/asr-writing.md`, then rewrite the transcript into coherent written Chinese.
 8. Save a Markdown file by default. Append the source BVID at the end of the Markdown body, for example `BVID: BV...`, instead of encoding it in the filename. Only respond directly without writing a file when the user explicitly asks for inline output.
 
@@ -67,9 +67,11 @@ Use third-person or impersonal Chinese prose for articles and tutorials. Avoid `
 For long subtitle files, work in passes:
 
 1. Split by timestamps, visible sections, or natural topic changes.
-2. Extract compact notes for each segment without adding information.
+2. Extract segment notes at the right density: for instructional or procedural content, retain enough detail for the reader to reconstruct the method; for narrative, commentary, interview, or news-like content, compress to key claims and supporting points. Do not add information.
 3. Merge notes into a single outline.
 4. Draft the final summary or article from the outline.
 5. Check the final text against the subtitle notes for unsupported claims.
+
+For long instructional transcripts, do not collapse the material into a short abstract unless the user requests brevity. Include topic structure, concepts, procedures, settings or numbers, examples, caveats, decision rules, and an actionable checklist only when the transcript supports them.
 
 Keep raw subtitles separate from polished output so future revisions can trace back to the source.
