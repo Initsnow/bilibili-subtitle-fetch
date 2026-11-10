@@ -251,5 +251,14 @@ class ServerHelpersTest(unittest.TestCase):
         )
 
 
+    def test_mcp_tools_registered(self) -> None:
+        from bilibili_subtitle_fetch.server import mcp
+
+        tool_names = [t.name for t in mcp._tool_manager.list_tools()]
+        self.assertIn("get_bilibili_subtitle", tool_names)
+        self.assertIn("search_bilibili_videos", tool_names)
+        self.assertIn("get_bilibili_video_desc", tool_names)
+
+
 if __name__ == "__main__":
     unittest.main()

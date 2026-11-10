@@ -10,7 +10,10 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pyperclip
 from bilibili_api import search, video
-from mcp.server.fastmcp import Context, FastMCP
+try:
+    from mcp.server.mcpserver import Context, MCPServer
+except ImportError:
+    from mcp.server.fastmcp import Context, FastMCP as MCPServer
 
 from bilibili_subtitle_fetch.credentials import (
     CredentialManager,
@@ -43,7 +46,7 @@ _env_enable_asr = os.environ.get("BILIBILI_ENABLE_ASR", "").strip().lower()
 DEFAULT_ENABLE_ASR: bool = _env_enable_asr not in {"0", "false", "no"}
 DEFAULT_ASR_MODEL_SIZE: str = os.environ.get("BILIBILI_ASR_MODEL_SIZE", "tiny")
 
-mcp = FastMCP(name="bilibili-subtitle-fetch")
+mcp = MCPServer(name="bilibili-subtitle-fetch")
 LogHandler = Callable[[str, str], Awaitable[None]]
 
 
