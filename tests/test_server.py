@@ -121,7 +121,7 @@ class ServerHelpersTest(unittest.TestCase):
 
         copy_mock.assert_called_once_with("字幕内容")
 
-    def test_run_fetch_command_prints_and_copies_subtitle(self) -> None:
+    def test_run_fetch_command_prints_subtitle_without_copying_by_default(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
 
@@ -146,6 +146,30 @@ class ServerHelpersTest(unittest.TestCase):
             preferred_lang="zh-CN",
             output_format="text",
         )
+        clipboard_mock.assert_not_called()
+        self.assertEqual(stdout.getvalue(), "字幕内容\n")
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_run_fetch_command_copies_when_copy_result_true(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch(
+            "bilibili_subtitle_fetch.server.fetch_bilibili_subtitle_text",
+            new=AsyncMock(return_value="字幕内容"),
+        ):
+            with patch(
+                "bilibili_subtitle_fetch.server.copy_to_clipboard"
+            ) as clipboard_mock:
+                run_fetch_command(
+                    "BV1fz4y1j7Mf",
+                    preferred_lang="zh-CN",
+                    output_format="text",
+                    copy_result=True,
+                    stdout=stdout,
+                    stderr=stderr,
+                )
+
         clipboard_mock.assert_called_once_with("字幕内容")
         self.assertEqual(stdout.getvalue(), "字幕内容\n")
         self.assertEqual(stderr.getvalue(), "Copied subtitles to clipboard.\n")
@@ -166,6 +190,7 @@ class ServerHelpersTest(unittest.TestCase):
                     "BV1fz4y1j7Mf",
                     preferred_lang="zh-CN",
                     output_format="text",
+                    copy_result=True,
                     stdout=stdout,
                     stderr=stderr,
                 )
@@ -237,7 +262,6 @@ class ServerHelpersTest(unittest.TestCase):
                     "BV1fz4y1j7Mf",
                     "--output-format",
                     "timestamped",
-                    "--no-clipboard",
                 ],
             ):
                 main()
@@ -247,6 +271,29 @@ class ServerHelpersTest(unittest.TestCase):
             preferred_lang="zh-CN",
             output_format="timestamped",
             copy_result=False,
+            use_asr=None,
+        )
+
+    def test_main_fetch_with_copy_flag(self) -> None:
+        with patch(
+            "bilibili_subtitle_fetch.server.run_fetch_command"
+        ) as run_fetch_mock:
+            with patch(
+                "sys.argv",
+                [
+                    "bilibili-subtitle-fetch",
+                    "fetch",
+                    "BV1fz4y1j7Mf",
+                    "--copy",
+                ],
+            ):
+                main()
+
+        run_fetch_mock.assert_called_once_with(
+            "BV1fz4y1j7Mf",
+            preferred_lang="zh-CN",
+            output_format="text",
+            copy_result=True,
             use_asr=None,
         )
 

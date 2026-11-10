@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 import sys
@@ -10,6 +11,12 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pyperclip
 from bilibili_api import search, video
+
+# Silence third-party HTTP wire logs by default to keep CLI and MCP stdio clean
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("bilibili-api-request").setLevel(logging.WARNING)
+
 try:
     from mcp.server.mcpserver import Context, MCPServer
 except ImportError:
@@ -541,7 +548,7 @@ def run_fetch_command(
     video_input: str,
     preferred_lang: str,
     output_format: Literal["text", "timestamped"],
-    copy_result: bool = True,
+    copy_result: bool = False,
     use_asr: Optional[bool] = None,
     stdout: Optional[TextIO] = None,
     stderr: Optional[TextIO] = None,
@@ -631,9 +638,24 @@ def main() -> None:
         help="Subtitle output format (text or timestamped)",
     )
     parser.add_argument(
-        "--no-clipboard",
+        "--copy",
+        "-c",
+        dest="copy_result",
         action="store_true",
-        help="Do not copy fetched subtitles to the clipboard.",
+        default=False,
+        help="Copy fetched subtitles to the clipboard (default: false).",
+    )
+    parser.add_argument(
+        "--no-clipboard",
+        dest="copy_result",
+        action="store_false",
+        help="Do not copy fetched subtitles to the clipboard (default behavior).",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose debug and HTTP request logs.",
     )
 
     # ASR flags (only relevant for `fetch` and `serve` commands)
@@ -650,6 +672,11 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        logging.getLogger("httpcore").setLevel(logging.INFO)
+        logging.getLogger("bilibili-api-request").setLevel(logging.INFO)
 
     if args.config:
         CREDENTIAL_MANAGER.set_config_path(args.config)
@@ -677,7 +704,7 @@ def main() -> None:
             args.video_input,
             preferred_lang=args.preferred_lang,
             output_format=args.output_format,
-            copy_result=not args.no_clipboard,
+            copy_result=args.copy_result,
             use_asr=cli_asr_override,
         )
         return

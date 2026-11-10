@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bilibili Subtitle Assistant"
+  short_description: "Fetch Bilibili subtitles and summarize or answer questions"
+  default_prompt: "Use $bilibili-subtitles to fetch subtitles from a Bilibili video and analyze its content."
